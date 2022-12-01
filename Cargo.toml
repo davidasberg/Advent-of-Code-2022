@@ -35,7 +35,7 @@ authors = ["David Åsberg <david.aasberg@gmail.com>"]
 edition = "2021"
 
 [dependencies]
-chrono = "0.4.19"
+chrono = "0.4.23"
 inquire = {version = "0.5.2", features = ["date"]}
 day01 = { path = "day01" }
 day02 = { path = "day02" }
