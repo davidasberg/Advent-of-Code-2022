@@ -28,7 +28,7 @@ pub fn part2() {
     // read input
     //split input into vector of strings on empty lines
 
-    let input = fs::read_to_string("input/Calories.txt").expect("Error reading file");
+    let input = fs::read_to_string("input/day01.in").expect("Error reading file");
     let input_vec: Vec<&str> = input.split("\n\n").collect();
 
     //top 3 max
