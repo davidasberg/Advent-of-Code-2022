@@ -54,7 +54,7 @@ fn read_input_alt(file: &str) -> Vec<(Move, Result)> {
             "C" => Move::Scissors,
             _ => panic!("Invalid input"),
         };
-        let out_come = match line_vec[1] {
+        let outcome = match line_vec[1] {
             "X" => Result::Lose,
             "Y" => Result::Tie,
             "Z" => Result::Win,
