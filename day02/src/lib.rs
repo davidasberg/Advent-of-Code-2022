@@ -54,13 +54,13 @@ fn read_input_alt(file: &str) -> Vec<(Move, Result)> {
             "C" => Move::Scissors,
             _ => panic!("Invalid input"),
         };
-        let our_move = match line_vec[1] {
+        let out_come = match line_vec[1] {
             "X" => Result::Lose,
             "Y" => Result::Tie,
             "Z" => Result::Win,
             _ => panic!("Invalid input"),
         };
-        moves_outcome.push((opponent_move, our_move));
+        moves_outcome.push((opponent_move, outcome));
     }
     moves_outcome
 }
