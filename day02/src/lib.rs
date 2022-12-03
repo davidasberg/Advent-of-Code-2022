@@ -2,15 +2,15 @@ use std::fs;
 
 #[derive(Clone, Copy)]
 enum Move {
-    Rock,
-    Paper,
-    Scissors,
+    Rock = 1,
+    Paper = 2,
+    Scissors = 3,
 }
 
 enum Result {
-    Win,
-    Lose,
-    Tie,
+    Win = 6,
+    Tie = 3,
+    Lose = 0,
 }
 
 // Read
@@ -74,12 +74,6 @@ fn calc_score(moves: &Vec<(Move, Move)>) -> i32 {
 
     // our score is our move + 6 if we win, 3 if we tie, 0 if we lose
     for (opponent_move, our_move) in moves {
-        let our_move_value = match our_move {
-            Move::Rock => 1,
-            Move::Paper => 2,
-            Move::Scissors => 3,
-        };
-
         let outcome = match (opponent_move, our_move) {
             (Move::Rock, Move::Rock) => Result::Tie,
             (Move::Rock, Move::Paper) => Result::Win,
@@ -92,11 +86,8 @@ fn calc_score(moves: &Vec<(Move, Move)>) -> i32 {
             (Move::Scissors, Move::Scissors) => Result::Tie,
         };
 
-        score += match outcome {
-            Result::Win => our_move_value + 6,
-            Result::Tie => our_move_value + 3,
-            Result::Lose => our_move_value,
-        };
+        score += outcome as i32 + *our_move as i32;
+        println!("{}", score);
     }
     score
 }
