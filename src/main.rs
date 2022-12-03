@@ -5,6 +5,7 @@ fn main() {
     let problems = vec![
         (day01::part1 as fn(), day01::part2 as fn()),
         (day02::part1 as fn(), day02::part2 as fn()),
+        (day03::part1 as fn(), day03::part2 as fn()),
     ];
 
     let dec_01 = NaiveDate::from_ymd_opt(2022, 12, 1).unwrap();
