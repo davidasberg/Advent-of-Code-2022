@@ -9,6 +9,7 @@ fn main() {
         (day04::part1 as fn(), day04::part2 as fn()),
         (day05::part1 as fn(), day05::part2 as fn()),
         (day06::part1 as fn(), day06::part2 as fn()),
+        (day07::part1 as fn(), day07::part2 as fn()),
     ];
 
     let dec_01 = NaiveDate::from_ymd_opt(2022, 12, 1).unwrap();
