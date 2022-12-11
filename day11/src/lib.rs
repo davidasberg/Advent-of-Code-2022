@@ -1,5 +1,6 @@
 use std::{iter, str::FromStr};
 
+#[derive(Copy, Clone)]
 enum Operation {
     Add(i32),
     Mult(i32),
@@ -97,30 +98,27 @@ pub fn part1() {
     let mut monkey_count = vec![0; monkeys.len()];
     for _ in 0..20 {
         for i in 0..monkeys.len() {
-            let mut monkey = Monkey {
-                items: vec![],
-                operation: Operation::Add(1),
-                divisible_test: 2,
-                throw_true: 0,
-                throw_false: 1,
-            };
-            std::mem::swap(&mut monkeys[i], &mut monkey);
-
+            let monkey = &mut monkeys[i];
             let items = monkey.items.drain(..).collect::<Vec<_>>();
+            let Monkey {
+                operation,
+                divisible_test,
+                throw_true,
+                throw_false,
+                ..
+            } = *monkey;
             monkey_count[i] += items.len();
             for item in items {
-                let mut item = monkey.operation.apply(item);
+                let mut item = operation.apply(item);
                 item /= 3;
 
-                let other_monkey: usize = if item % monkey.divisible_test == 0 {
-                    monkey.throw_true
+                let other_monkey: usize = if item % divisible_test == 0 {
+                    throw_true
                 } else {
-                    monkey.throw_false
+                    throw_false
                 };
                 monkeys[other_monkey].items.push(item);
             }
-
-            std::mem::swap(&mut monkeys[i], &mut monkey);
         }
     }
     monkey_count.sort();
@@ -138,30 +136,27 @@ pub fn part2() {
     let mut monkey_count = vec![0; monkeys.len()];
     for _ in 0..10000 {
         for i in 0..monkeys.len() {
-            let mut monkey = Monkey {
-                items: vec![],
-                operation: Operation::Add(1),
-                divisible_test: 2,
-                throw_true: 0,
-                throw_false: 1,
-            };
-            std::mem::swap(&mut monkeys[i], &mut monkey);
-
+            let monkey = &mut monkeys[i];
             let items = monkey.items.drain(..).collect::<Vec<_>>();
+            let Monkey {
+                operation,
+                divisible_test,
+                throw_true,
+                throw_false,
+                ..
+            } = *monkey;
             monkey_count[i] += items.len();
             for item in items {
-                let mut item = monkey.operation.apply(item);
+                let mut item = operation.apply(item);
                 item = item % modulo_divisor;
 
-                let other_monkey: usize = if item % monkey.divisible_test == 0 {
-                    monkey.throw_true
+                let other_monkey: usize = if item % divisible_test == 0 {
+                    throw_true
                 } else {
-                    monkey.throw_false
+                    throw_false
                 };
                 monkeys[other_monkey].items.push(item);
             }
-
-            std::mem::swap(&mut monkeys[i], &mut monkey);
         }
     }
     monkey_count.sort();
