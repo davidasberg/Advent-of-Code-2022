@@ -6,22 +6,22 @@ fn read_input(file: &str) -> Vec<char> {
     input.chars().collect()
 }
 
-pub fn find_first_marker(message: Vec<char>, window_size: usize) {
-    for (i, window) in message.windows(window_size).enumerate() {
-        // if all the characters are unique, print the index and break
-        if window.iter().collect::<HashSet<_>>().len() == window_size {
-            println!("{}", i + window_size);
-            break;
-        }
-    }
+pub fn find_first_marker(message: Vec<char>, window_size: usize) -> usize {
+    message
+        .windows(window_size)
+        .enumerate()
+        .find(|(_, window)| window.iter().collect::<HashSet<_>>().len() == window_size)
+        .unwrap()
+        .0
+        + window_size
 }
 
 pub fn part1() {
     let message = read_input("input/day06.in");
-    find_first_marker(message, 4);
+    println!("{}", find_first_marker(message, 4));
 }
 
 pub fn part2() {
     let message = read_input("input/day06.in");
-    find_first_marker(message, 14);
+    println!("{}", find_first_marker(message, 14));
 }
