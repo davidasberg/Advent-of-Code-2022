@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 enum Instruction {
     AddX(i32), // takes two cycles
     NoOp,      // takes one cycle

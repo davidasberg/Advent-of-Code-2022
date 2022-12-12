@@ -1,4 +1,4 @@
-use std::{iter, str::FromStr};
+use std::str::FromStr;
 
 #[derive(Copy, Clone)]
 enum Operation {
