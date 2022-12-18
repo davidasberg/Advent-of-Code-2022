@@ -1,6 +1,9 @@
 use itertools::Itertools;
 use rayon::prelude::*;
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Range,
+};
 const CHAMBER_WIDTH: usize = 7;
 const DEFAULT_ROW: [bool; CHAMBER_WIDTH] = [false; CHAMBER_WIDTH];
 const MAX_ROCKS_PART1: usize = 2022;
@@ -82,9 +85,10 @@ where
     }
 
     fn spawn_rock(&mut self, rock: RockType) {
-        let mut pos = (2, self.highest_rock + 4);
+        let mut pos: Pos = (2, self.highest_rock + 4);
 
         let mut down = false;
+        // self.print(pos, rock);
         // self.print(pos, rock);
         loop {
             let dir = if !down {
@@ -94,7 +98,7 @@ where
             };
             match dir {
                 Direction::Left => {
-                    let new_pos = (pos.0 - 1, pos.1);
+                    let new_pos = (pos.0.saturating_sub(1), pos.1);
                     if self.can_spawn(&rock.get_spaces(new_pos)) {
                         pos = new_pos;
                     }
@@ -106,7 +110,7 @@ where
                     }
                 }
                 Direction::Down => {
-                    let new_pos = (pos.0, pos.1 - 1);
+                    let new_pos = (pos.0, pos.1.saturating_sub(1));
                     if self.can_spawn(&rock.get_spaces(new_pos)) {
                         pos = new_pos;
                     } else {
@@ -115,6 +119,7 @@ where
                 }
             }
             down = !down;
+            // self.print(pos, rock);
         }
 
         let spaces = rock.get_spaces(pos);
@@ -148,11 +153,11 @@ where
         self.winds.next().unwrap().clone()
     }
 
-    fn get_highest_point(&self, x: usize) -> usize {
-        for y in (0..=self.highest_rock + 4).rev() {
+    fn get_profile(&self, x: usize) -> usize {
+        for (i, y) in (0..=self.highest_rock).rev().enumerate() {
             if let Some(row) = self.grid.get(&y) {
                 if row[x] {
-                    return y;
+                    return i;
                 }
             }
         }
@@ -167,7 +172,7 @@ where
             print!("|");
             for x in 0..CHAMBER_WIDTH {
                 if spaces.contains(&(x, y)) {
-                    print!("X");
+                    print!("@");
                 } else if row[x] {
                     print!("#");
                 } else {
@@ -180,20 +185,15 @@ where
         println!();
     }
 
-    fn top_cave_rows(&self, num_rows: usize) -> Vec<Vec<bool>> {
-        itertools::iproduct!(0..CHAMBER_WIDTH, 0..num_rows)
-            .map(|(x, y)| {
-                let y = self.highest_rock + 4 - y;
-                if let Some(row) = self.grid.get(&y) {
-                    row[x]
-                } else {
-                    false
-                }
-            })
-            .chunks(CHAMBER_WIDTH)
-            .into_iter()
-            .map(|chunk| chunk.collect())
-            .collect()
+    fn copy_section(&mut self, copy_range: Range<usize>, to_y: usize) {
+        for (i, y) in copy_range.clone().rev().enumerate() {
+            let row = self.grid.entry(y).or_insert(DEFAULT_ROW).clone();
+            let new_row = self.grid.entry(to_y - i).or_insert(DEFAULT_ROW);
+            for x in 0..CHAMBER_WIDTH {
+                new_row[x] = row[x];
+            }
+        }
+        self.highest_rock = to_y;
     }
 }
 
@@ -215,17 +215,17 @@ fn read_input(file: &str) -> Vec<Direction> {
         };
         winds.push(wind);
     }
-    println!("winds: {:?}", winds);
+    // println!("winds: {:?}", winds);
     winds
 }
 
 pub fn part1() {
-    let winds = read_input("input/day17.in");
+    let winds = read_input("input/day17.example");
     let winds_cycle = winds.iter().cycle();
     let mut cave = Cave::new(winds_cycle);
     for (i, rock_type) in ROCK_ORDER.iter().cycle().enumerate() {
         println!("rock {}: {:?}", i, rock_type);
-        if i == MAX_ROCKS_PART1 {
+        if i >= MAX_ROCKS_PART1 {
             break;
         }
         cave.spawn_rock(*rock_type);
@@ -235,30 +235,51 @@ pub fn part1() {
 }
 
 pub fn part2() {
+    let time = std::time::Instant::now();
     let winds = read_input("input/day17.in");
     let winds_cycle = winds.iter().cycle();
     let mut cave = Cave::new(winds_cycle);
 
     let mut seen_states: HashMap<State, (usize, usize)> = HashMap::new();
-    let mut rock_order = ROCK_ORDER.iter().cycle().enumerate();
-    let mut cycle_height = 0;
-    while let Some((i, rock_type)) = rock_order.next() {
+    let mut rock_order = ROCK_ORDER.iter().cycle();
+
+    let mut drops = 0;
+    while let Some(rock_type) = rock_order.next() {
         // println!("rock {}: {:?}", i, rock_type);
-        if i == MAX_ROCKS_PART2 {
+        if drops >= MAX_ROCKS_PART2 {
             break;
         }
-        let highest_points: Vec<_> = (0..CHAMBER_WIDTH)
-            .map(|x| cave.get_highest_point(x))
-            .collect();
+
+        cave.spawn_rock(*rock_type);
+        drops += 1;
+
+        let profile: Vec<_> = (0..CHAMBER_WIDTH).map(|x| cave.get_profile(x)).collect();
+
         let state = State {
-            profile: highest_points.try_into().unwrap(),
+            profile: profile.try_into().unwrap(),
             winds: cave.winds.clone().copied().take(winds.len()).collect(),
             rock_type: *rock_type,
         };
-        if (i % ROCK_ORDER.len() as i64) == 0 {}
 
-        cave.spawn_rock(*rock_type);
+        if let Some((prev_drops, prev_y)) = seen_states.insert(state, (drops, cave.highest_rock)) {
+            let cycle_len = drops - prev_drops;
+            println!(
+                "Found cycle of length {} at {} drops, previous state at {} drops",
+                cycle_len, drops, prev_drops
+            );
+            let cycles = (MAX_ROCKS_PART2 - drops) / cycle_len;
+            println!("{} cycles", cycles);
+            drops += cycles * cycle_len;
+            let copy_range = prev_y + 1..cave.highest_rock + 1;
+            println!("Copying range {:?}", copy_range);
+            let to_y = cave.highest_rock + (cave.highest_rock - prev_y) * cycles;
+            println!("Copying to {}", to_y);
+            cave.copy_section(copy_range, to_y);
+            seen_states.clear();
+        }
     }
 
-    println!("Tallest rock: {}", cave.highest_rock + cycle_height);
+    let elapsed = time.elapsed();
+    println!("Tallest rock: {}", cave.highest_rock);
+    println!("Time: {}ms", elapsed.as_millis());
 }
