@@ -28,16 +28,11 @@ impl Pos {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct LavaVoxel(Pos);
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct SteamVoxel(Pos);
-
 // A droplet is represented by a 3D grid
 #[derive(Debug, Clone)]
 struct Volume {
-    lava: HashSet<LavaVoxel>,
-    steam: HashSet<SteamVoxel>,
+    lava: HashSet<Pos>,
+    steam: HashSet<Pos>,
 }
 
 impl FromStr for Volume {
@@ -51,11 +46,11 @@ impl FromStr for Volume {
                 .map(|x| x.parse::<i32>().unwrap())
                 .collect::<Vec<i32>>();
 
-            let voxel = LavaVoxel(Pos {
+            let voxel = Pos {
                 x: point[0],
                 y: point[1],
                 z: point[2],
-            });
+            };
             grid.insert(voxel);
         }
 
@@ -75,9 +70,7 @@ impl Volume {
                 y: point.y + side.y,
                 z: point.z + side.z,
             };
-            if !self.lava.contains(&LavaVoxel(neighbour))
-                && !self.steam.contains(&SteamVoxel(neighbour))
-            {
+            if !self.lava.contains(&neighbour) && !self.steam.contains(&neighbour) {
                 count += 1;
             }
         }
@@ -92,7 +85,7 @@ impl Volume {
                 y: point.y + side.y,
                 z: point.z + side.z,
             };
-            if self.steam.contains(&SteamVoxel(neighbour)) {
+            if self.steam.contains(&neighbour) {
                 count += 1;
             }
         }
@@ -102,8 +95,8 @@ impl Volume {
     fn get_lava_surface(&self) -> usize {
         let mut surface_area = 0;
         for voxel in &self.lava {
-            let empty_sides = self.get_air_neighbours(&voxel.0);
-            let steam_neighbours = self.get_steam_neighbours(&voxel.0);
+            let empty_sides = self.get_air_neighbours(&voxel);
+            let steam_neighbours = self.get_steam_neighbours(&voxel);
             surface_area += empty_sides + steam_neighbours;
         }
         surface_area
@@ -112,19 +105,19 @@ impl Volume {
     fn get_lava_exterior_surface(&self) -> usize {
         let mut surface_area = 0;
         for voxel in &self.lava {
-            let empty_sides = self.get_steam_neighbours(&voxel.0);
+            let empty_sides = self.get_steam_neighbours(&voxel);
             surface_area += empty_sides;
         }
         surface_area
     }
 
     fn get_lava_bounds(&self) -> (Pos, Pos) {
-        let min_x = self.lava.iter().map(|x| x.0.x).min().unwrap();
-        let min_y = self.lava.iter().map(|x| x.0.y).min().unwrap();
-        let min_z = self.lava.iter().map(|x| x.0.z).min().unwrap();
-        let max_x = self.lava.iter().map(|x| x.0.x).max().unwrap();
-        let max_y = self.lava.iter().map(|x| x.0.y).max().unwrap();
-        let max_z = self.lava.iter().map(|x| x.0.z).max().unwrap();
+        let min_x = self.lava.iter().map(|p| p.x).min().unwrap();
+        let min_y = self.lava.iter().map(|p| p.y).min().unwrap();
+        let min_z = self.lava.iter().map(|p| p.z).min().unwrap();
+        let max_x = self.lava.iter().map(|p| p.x).max().unwrap();
+        let max_y = self.lava.iter().map(|p| p.y).max().unwrap();
+        let max_z = self.lava.iter().map(|p| p.z).max().unwrap();
 
         let lower_bounds = Pos {
             x: min_x - 1,
@@ -156,12 +149,12 @@ impl Volume {
 
                 // if neighbour is not in bounds, skip
                 if !neighbour.is_in_bounds(lower_bounds, upper_bounds)
-                    || self.lava.contains(&LavaVoxel(neighbour))
+                    || self.lava.contains(&neighbour)
                 {
                     continue;
                 }
 
-                if self.steam.insert(SteamVoxel(neighbour)) {
+                if self.steam.insert(neighbour) {
                     queue.push(neighbour);
                 }
             }
@@ -187,10 +180,7 @@ pub fn part2() {
     let (lower_bounds, upper_bounds) = volume.get_lava_bounds();
 
     let mut bounds = (lower_bounds, upper_bounds);
-    println!("{:?}", bounds);
     volume.expand_steam_from(lower_bounds, &mut bounds);
     let exterior_surface = volume.get_lava_exterior_surface();
-    println!("{:?}", volume.lava.len());
-    println!("{:?}", volume.steam.len());
     println!("Part 2: {}", exterior_surface);
 }
