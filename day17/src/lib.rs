@@ -1,5 +1,3 @@
-use itertools::Itertools;
-use rayon::prelude::*;
 use std::{
     collections::{HashMap, HashSet},
     ops::Range,
@@ -164,6 +162,7 @@ where
         0
     }
 
+    #[allow(dead_code)]
     fn print(&self, pos: Pos, rock: RockType) {
         let spaces = rock.get_spaces(pos);
         let spaces: HashSet<(usize, usize)> = spaces.iter().copied().collect();

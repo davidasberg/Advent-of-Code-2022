@@ -1,8 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    ops::Range,
-    str::FromStr,
-};
+use std::{collections::HashSet, ops::Range, str::FromStr};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 struct Pos(i64, i64);

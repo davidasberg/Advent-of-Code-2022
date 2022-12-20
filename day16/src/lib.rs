@@ -35,7 +35,7 @@ impl Cave {
     fn calc_distances(&self) -> [[usize; NUM_VALVES]; NUM_VALVES] {
         let mut distances = [[usize::MAX; NUM_VALVES]; NUM_VALVES];
         let mut seen = HashSet::new();
-        for (id, valve) in self
+        for (id, _) in self
             .valves
             .iter()
             .enumerate()
@@ -173,8 +173,7 @@ pub fn part1() {
     );
     // println!("{:#?}", valves_to_release);
 
-    let (release, path) =
-        find_max_release(&distances, &cave, &mut valves_to_release, 30, cave.aa_id);
+    let (release, _) = find_max_release(&distances, &cave, &mut valves_to_release, 30, cave.aa_id);
 
     // println!("{:#?}", path);
     println!("Part 1: {}", release);
@@ -185,7 +184,7 @@ pub fn part2() {
     let cave = read_input("input/day16.in");
     let distances = cave.calc_distances();
 
-    let mut valves_to_release = cave
+    let valves_to_release = cave
         .valves
         .iter()
         .enumerate()
@@ -216,8 +215,8 @@ pub fn part2() {
     for (group1, group2) in all_groups {
         let mut group1 = HashSet::from_iter(group1);
         let mut group2 = HashSet::from_iter(group2);
-        let (release1, path1) = find_max_release(&distances, &cave, &mut group1, 26, cave.aa_id);
-        let (release2, path2) = find_max_release(&distances, &cave, &mut group2, 26, cave.aa_id);
+        let (release1, _) = find_max_release(&distances, &cave, &mut group1, 26, cave.aa_id);
+        let (release2, _) = find_max_release(&distances, &cave, &mut group2, 26, cave.aa_id);
         let release = release1 + release2;
         if release > max {
             max = release;
