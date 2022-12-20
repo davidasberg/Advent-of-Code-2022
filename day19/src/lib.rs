@@ -1,329 +1,271 @@
-use std::str::FromStr;
-
-use pathfinding::{self, prelude::bfs_reach};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum Resource {
-    Ore,
-    Clay,
-    Obsidian,
-    Geode,
-}
+use hashbrown::{HashMap, HashSet};
+use rayon::prelude::*;
+use std::{collections::VecDeque, str::FromStr};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
-struct RobotBlueprint {
-    ore: u32,
-    clay: u32,
-    obsidian: u32,
-    geode: u32,
+struct Blueprint {
+    ore_robot: (u32, u32, u32),
+    clay_robot: (u32, u32, u32),
+    obsidian_robot: (u32, u32, u32),
+    geode_robot: (u32, u32, u32),
 }
 
-impl FromStr for RobotBlueprint {
-    type Err = String;
-
-    // Parses a string like:
-    // "Each ore robot costs 4 ore"
-    // or
-    // "Each clay robot costs 4 ore"
-    // or
-    // "Each obsidian robot costs 3 ore and 11 clay"
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // remove everything before "costs"
-        // split on spaces
-        let tokens = s
-            .split("costs")
-            .skip(1)
-            .next()
-            .unwrap()
-            .split(' ')
-            .collect::<Vec<_>>();
-
-        // find the amount of a resource
-        let find_amount = |tokens: &Vec<&str>, resource: &str| -> u32 {
-            let amount = tokens
-                .iter()
-                .position(|&x| x == resource)
-                .and_then(|i| tokens[i - 1].parse().ok())
-                .unwrap_or(0);
-            amount
-        };
-
-        let ore = find_amount(&tokens, "ore");
-        let clay = find_amount(&tokens, "clay");
-        let obsidian = find_amount(&tokens, "obsidian");
-        let geode = find_amount(&tokens, "geode");
-
-        Ok(RobotBlueprint {
-            ore,
-            clay,
-            obsidian,
-            geode,
-        })
+impl Blueprint {
+    fn max_cost(&self) -> (u32, u32, u32) {
+        let ore = self.ore_robot.0.max(
+            self.clay_robot
+                .0
+                .max(self.obsidian_robot.0.max(self.geode_robot.0)),
+        );
+        let clay = self.ore_robot.1.max(
+            self.clay_robot
+                .1
+                .max(self.obsidian_robot.1.max(self.geode_robot.1)),
+        );
+        let obsidian = self.ore_robot.2.max(
+            self.clay_robot
+                .2
+                .max(self.obsidian_robot.2.max(self.geode_robot.2)),
+        );
+        (ore, clay, obsidian)
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
-struct BlueprintCollection {
-    ore_robot: RobotBlueprint,
-    clay_robot: RobotBlueprint,
-    obsidian_robot: RobotBlueprint,
-    geode_robot: RobotBlueprint,
-}
-
-impl FromStr for BlueprintCollection {
+impl FromStr for Blueprint {
     type Err = String;
 
     //Blueprint 1: Each ore robot costs 4 ore. Each clay robot costs 4 ore. Each obsidian robot costs 3 ore and 11 clay. Each geode robot costs 3 ore and 8 obsidian.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let blueprint = s.split(':').skip(1).next().unwrap();
-        let mut parts = blueprint.split('.').map(|s| s.trim());
-        let ore = parts.next().unwrap().parse().unwrap();
-        let clay = parts.next().unwrap().parse().unwrap();
-        let obsidian = parts.next().unwrap().parse().unwrap();
-        let geode = parts.next().unwrap().parse().unwrap();
-        Ok(BlueprintCollection {
-            ore_robot: ore,
-            clay_robot: clay,
-            obsidian_robot: obsidian,
-            geode_robot: geode,
+        let mut ore_robot = (0, 0, 0);
+        let mut clay_robot = (0, 0, 0);
+        let mut obsidian_robot = (0, 0, 0);
+        let mut geode_robot = (0, 0, 0);
+
+        let find_amount = |resource: &str, parts: &Vec<&str>| -> u32 {
+            if let Some(index) = parts.iter().position(|&x| x == resource) {
+                return parts[index - 1].parse().unwrap();
+            }
+            0
+        };
+
+        for b in blueprint.split('.').take(4) {
+            let resource = b
+                .split_whitespace()
+                .find(|&x| x == "ore" || x == "clay" || x == "obsidian" || x == "geode")
+                .unwrap();
+            let costs = b
+                .split("costs")
+                .skip(1)
+                .next()
+                .unwrap()
+                .split_whitespace()
+                .collect::<Vec<&str>>();
+            let ore = find_amount("ore", &costs);
+            let clay = find_amount("clay", &costs);
+            let obsidian = find_amount("obsidian", &costs);
+            match resource {
+                "ore" => ore_robot = (ore, clay, obsidian),
+                "clay" => clay_robot = (ore, clay, obsidian),
+                "obsidian" => obsidian_robot = (ore, clay, obsidian),
+                "geode" => geode_robot = (ore, clay, obsidian),
+                _ => unreachable!(),
+            }
+        }
+
+        Ok(Self {
+            ore_robot,
+            clay_robot,
+            obsidian_robot,
+            geode_robot,
         })
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 struct Factory {
-    robots: Vec<Resource>,
-    blueprint: BlueprintCollection,
     ore: u32,
     clay: u32,
-    obisidan: u32,
-    geode: u32,
-    being_built: Option<Resource>,
+    obsidian: u32,
+    geodes: u32,
+    ore_robots: u32,
+    clay_robots: u32,
+    obsidian_robots: u32,
+    geode_robots: u32,
 }
 
 impl Factory {
-    fn collect_all(&mut self) {
-        let robots = self.robots.clone();
-        for robot in robots {
-            self.collect(robot);
-        }
+    fn collect(&mut self) {
+        self.ore += self.ore_robots;
+        self.clay += self.clay_robots;
+        self.obsidian += self.obsidian_robots;
+        self.geodes += self.geode_robots;
     }
 
-    fn collect(&mut self, resource: Resource) {
+    fn start_building(&mut self, resource: &str, blueprint: &Blueprint) {
         match resource {
-            Resource::Ore => {
-                self.ore += 1;
+            "ore" => {
+                self.ore -= blueprint.ore_robot.0;
+                self.clay -= blueprint.ore_robot.1;
+                self.obsidian -= blueprint.ore_robot.2;
             }
-            Resource::Clay => {
-                self.clay += 1;
+            "clay" => {
+                self.ore -= blueprint.clay_robot.0;
+                self.clay -= blueprint.clay_robot.1;
+                self.obsidian -= blueprint.clay_robot.2;
             }
-            Resource::Obsidian => {
-                self.obisidan += 1;
+            "obsidian" => {
+                self.ore -= blueprint.obsidian_robot.0;
+                self.clay -= blueprint.obsidian_robot.1;
+                self.obsidian -= blueprint.obsidian_robot.2;
             }
-            Resource::Geode => {
-                self.geode += 1;
+            "geode" => {
+                self.ore -= blueprint.geode_robot.0;
+                self.clay -= blueprint.geode_robot.1;
+                self.obsidian -= blueprint.geode_robot.2;
             }
+            _ => unreachable!(),
         }
     }
 
-    // builds a robot if possible
-    // if resources are missing, it will not build
-    // if we have enough robots, it will not build
-    fn build_robot(&mut self, resource: Resource) {
-        if self.can_build_robot(resource) {
-            self.start_building(resource);
+    fn finish_building(&mut self, resource: &str) {
+        match resource {
+            "ore" => self.ore_robots += 1,
+            "clay" => self.clay_robots += 1,
+            "obsidian" => self.obsidian_robots += 1,
+            "geode" => self.geode_robots += 1,
+            _ => unreachable!(),
         }
     }
+}
 
-    fn can_build_robot(&self, resource: Resource) -> bool {
-        let blueprint = match resource {
-            Resource::Ore => self.blueprint.ore_robot,
-            Resource::Clay => self.blueprint.clay_robot,
-            Resource::Obsidian => self.blueprint.obsidian_robot,
-            Resource::Geode => self.blueprint.geode_robot,
-        };
-        if self.ore >= blueprint.ore
-            && self.clay >= blueprint.clay
-            && self.obisidan >= blueprint.obsidian
-            && self.geode >= blueprint.geode
-            && self.robots.iter().filter(|&r| *r == resource).count()
-                < self.max_needed_robots(resource) as usize
+fn find_maximum_geodes(blueprint: &Blueprint, time: u32) -> u32 {
+    let mut queue: VecDeque<(u32, Factory)> = VecDeque::new();
+    let mut visited: HashSet<Factory> = HashSet::new();
+    let mut max_at_t: HashMap<u32, u32> = HashMap::new();
+    let max_costs: (u32, u32, u32) = blueprint.max_cost();
+    let time_remaining = time;
+    let factory = Factory {
+        ore: 0,
+        clay: 0,
+        obsidian: 0,
+        geodes: 0,
+        ore_robots: 1,
+        clay_robots: 0,
+        obsidian_robots: 0,
+        geode_robots: 0,
+    };
+
+    queue.push_back((time_remaining, factory));
+    while let Some((time_remaining, factory)) = queue.pop_front() {
+        // println!("{} {:?}", time_remaining, factory);
+
+        let potential_geodes = factory.geodes       // the geodes we already have
+            + factory.geode_robots * time_remaining      // the geodes we can make with the robots we have
+            + time_remaining * (time_remaining + 1) / 2; // the geodes we can make with the robots we can make, if we make one every minute
+        let max = max_at_t.entry(time_remaining).or_insert(0);
+        if *max > potential_geodes {
+            continue;
+        }
+        if factory.geodes > *max {
+            *max = factory.geodes;
+        }
+
+        if time_remaining <= 0 || visited.contains(&factory) {
+            continue;
+        }
+
+        visited.insert(factory);
+
+        if factory.ore >= blueprint.geode_robot.0
+            && factory.clay >= blueprint.geode_robot.1
+            && factory.obsidian >= blueprint.geode_robot.2
         {
-            true
-        } else {
-            false
+            let mut new_factory = factory.clone();
+            new_factory.start_building("geode", blueprint);
+            new_factory.collect();
+            new_factory.finish_building("geode");
+            queue.push_back((time_remaining - 1, new_factory));
+            continue;
         }
-    }
 
-    fn max_needed_robots(&self, resource: Resource) -> u32 {
-        let max_ore_cost = self
-            .blueprint
-            .ore_robot
-            .ore
-            .max(self.blueprint.clay_robot.ore)
-            .max(self.blueprint.obsidian_robot.ore)
-            .max(self.blueprint.geode_robot.ore);
-        let max_clay_cost = self
-            .blueprint
-            .ore_robot
-            .clay
-            .max(self.blueprint.clay_robot.clay)
-            .max(self.blueprint.obsidian_robot.clay)
-            .max(self.blueprint.geode_robot.clay);
-        let max_obsidian_cost = self
-            .blueprint
-            .ore_robot
-            .obsidian
-            .max(self.blueprint.clay_robot.obsidian)
-            .max(self.blueprint.obsidian_robot.obsidian)
-            .max(self.blueprint.geode_robot.obsidian);
-        let max_geode_cost = self
-            .blueprint
-            .ore_robot
-            .geode
-            .max(self.blueprint.clay_robot.geode)
-            .max(self.blueprint.obsidian_robot.geode)
-            .max(self.blueprint.geode_robot.geode);
-
-        match resource {
-            Resource::Ore => max_ore_cost,
-            Resource::Clay => max_clay_cost,
-            Resource::Obsidian => max_obsidian_cost,
-            Resource::Geode => max_geode_cost,
+        if factory.ore >= blueprint.obsidian_robot.0
+            && factory.clay >= blueprint.obsidian_robot.1
+            && factory.obsidian >= blueprint.obsidian_robot.2
+            && factory.obsidian_robots < max_costs.2
+        {
+            let mut new_factory = factory.clone();
+            new_factory.start_building("obsidian", blueprint);
+            new_factory.collect();
+            new_factory.finish_building("obsidian");
+            queue.push_back((time_remaining - 1, new_factory));
         }
-    }
 
-    fn start_building(&mut self, resource: Resource) {
-        let blueprint = match resource {
-            Resource::Ore => self.blueprint.ore_robot,
-            Resource::Clay => self.blueprint.clay_robot,
-            Resource::Obsidian => self.blueprint.obsidian_robot,
-            Resource::Geode => self.blueprint.geode_robot,
-        };
-        self.ore -= blueprint.ore;
-        self.clay -= blueprint.clay;
-        self.obisidan -= blueprint.obsidian;
-        self.geode -= blueprint.geode;
-
-        self.being_built = Some(resource);
-    }
-
-    fn finish_building(&mut self) {
-        if let Some(resource) = self.being_built {
-            self.robots.push(resource);
-            self.being_built = None;
+        if factory.ore >= blueprint.clay_robot.0
+            && factory.clay >= blueprint.clay_robot.1
+            && factory.obsidian >= blueprint.clay_robot.2
+            && factory.clay_robots < max_costs.1
+        {
+            let mut new_factory = factory.clone();
+            new_factory.start_building("clay", blueprint);
+            new_factory.collect();
+            new_factory.finish_building("clay");
+            queue.push_back((time_remaining - 1, new_factory));
         }
+
+        if factory.ore >= blueprint.ore_robot.0
+            && factory.clay >= blueprint.ore_robot.1
+            && factory.obsidian >= blueprint.ore_robot.2
+            && factory.ore_robots < max_costs.0
+        {
+            let mut new_factory = factory.clone();
+            new_factory.start_building("ore", blueprint);
+            new_factory.collect();
+            new_factory.finish_building("ore");
+            queue.push_back((time_remaining - 1, new_factory));
+        }
+
+        let mut new_factory = factory.clone();
+        new_factory.collect();
+        queue.push_back((time_remaining - 1, new_factory));
     }
+
+    *max_at_t.entry(0).or_insert(0)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct State {
-    factory: Factory,
-    time_remaining: u32,
-}
-
-impl State {
-    // the successors are all the possible actions that can be taken from this state
-    // let the factory build a robot, or not
-    // all the existing robots collect a resource
-    fn successors(&self) -> Vec<State> {
-        let mut successors = Vec::new();
-
-        if self.time_remaining == 0 {
-            return successors;
-        }
-
-        let mut next_factory = self.factory.clone();
-        next_factory.finish_building();
-        let time_remaining = self.time_remaining - 1;
-
-        let mut new_robots = vec![];
-        for resource in &[
-            Resource::Ore,
-            Resource::Clay,
-            Resource::Obsidian,
-            Resource::Geode,
-        ] {
-            let factory = next_factory.clone();
-            if factory.can_build_robot(*resource) {
-                new_robots.push(*resource);
-            }
-        }
-
-        next_factory.collect_all();
-        successors.push(State {
-            factory: next_factory.clone(),
-            time_remaining,
-        });
-        for robot in new_robots {
-            let mut factory = next_factory.clone();
-            factory.build_robot(robot);
-            successors.push(State {
-                factory,
-                time_remaining,
-            });
-        }
-
-        // println!("Successors: {:#?}", successors);
-        successors
-    }
-}
-
-fn read_input(file: &str) -> Vec<BlueprintCollection> {
+fn read_input(file: &str) -> Vec<Blueprint> {
     let input = std::fs::read_to_string(file).unwrap();
     input.lines().map(|line| line.parse().unwrap()).collect()
 }
 
 pub fn part1() {
-    let blueprints = read_input("input/day19.example");
-    //println!("{:#?}", blueprints);
+    let blueprints = read_input("input/day19.in");
 
-    let mut max_geodes = 0;
-    let mut max_geodes_blueprint = 1;
-    for (i, blueprint) in blueprints.iter().enumerate() {
-        // Start a factory with 1 ore robot
-        let factory = Factory {
-            robots: vec![Resource::Ore],
-            blueprint: *blueprint,
-            ore: 0,
-            clay: 0,
-            obisidan: 0,
-            geode: 0,
-            being_built: None,
-        };
+    let quality_total = blueprints
+        .par_iter()
+        .enumerate()
+        .map(|(i, blueprint)| {
+            let current_max = find_maximum_geodes(blueprint, 24);
+            println!("Max geodes with blueprint {}: {}", i + 1, current_max);
+            current_max * (i as u32 + 1)
+        })
+        .sum::<u32>();
 
-        let state = State {
-            factory,
-            time_remaining: 24,
-        };
-
-        let states = bfs_reach(state, |state| state.successors()).collect::<Vec<_>>();
-        println!("Num states checked {}", states.len());
-
-        let final_states = states
-            .iter()
-            .filter(|state| state.time_remaining == 0)
-            .collect::<Vec<_>>();
-        println!("Num final states {}", final_states.len());
-
-        let max_geodes_in_final_states = final_states
-            .iter()
-            .map(|state| state.factory.geode)
-            .max()
-            .unwrap();
-
-        println!(
-            "Max geodes with blueprint {}: {}",
-            i + 1,
-            max_geodes_in_final_states
-        );
-
-        if max_geodes_in_final_states > max_geodes {
-            max_geodes = max_geodes_in_final_states;
-            max_geodes_blueprint = i + 1;
-        }
-    }
-    println!("Max geodes: {}", max_geodes * max_geodes_blueprint as u32);
+    println!("Quality: {}", quality_total);
 }
+pub fn part2() {
+    let blueprints = read_input("input/day19.in");
 
-pub fn part2() {}
+    let quality_total = blueprints
+        .par_iter()
+        .take(3)
+        .enumerate()
+        .map(|(i, blueprint)| {
+            let current_max = find_maximum_geodes(blueprint, 32);
+            println!("Max geodes with blueprint {}: {}", i + 1, current_max);
+            current_max
+        })
+        .product::<u32>();
+
+    println!("Quality: {}", quality_total);
+}
